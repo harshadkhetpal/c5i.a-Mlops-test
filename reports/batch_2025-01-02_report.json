@@ -1,0 +1,37 @@
+{
+  "batch_id": "2025-01-02",
+  "generated_at": "2025-11-25T20:04:48.320995",
+  "summary": {
+    "total_samples": 288,
+    "start_time": "2025-01-02 00:00:00",
+    "end_time": "2025-01-02 23:55:00",
+    "duration_hours": 23.916666666666668
+  },
+  "metrics": {
+    "batch_id": "2025-01-02",
+    "peak_co2_ppm": 2.394405937036766,
+    "time_to_peak_minutes": 320.0,
+    "do_half_life_minutes": 5.0,
+    "pressure_growth_kpa": -1.1568083672194256,
+    "duration_hours": 23.916666666666668,
+    "num_samples": 288
+  },
+  "anomalies": {
+    "count": 288,
+    "types": {
+      "stuck_fermentation": 148,
+      "low_pressure": 136,
+      "oxidation_risk": 4
+    },
+    "severity_breakdown": {
+      "high": 148,
+      "medium": 140
+    }
+  },
+  "recommendations": [
+    "Stuck fermentation detected. Consider checking yeast viability and temperature.",
+    "Pressure anomalies detected. Monitor tank pressure closely and check safety valves.",
+    "Oxidation risk detected. Check tank seals and DO levels.",
+    "Low peak CO2 detected. Consider reviewing fermentation parameters."
+  ]
+}
