@@ -127,12 +127,19 @@ anomalies = detector.detect_all(data)
 
 ### 3. API Deployment
 
-Start the Flask API server:
+Start the FastAPI server:
+
+```bash
+python run_api.py
+```
+
+Or programmatically:
 
 ```python
 from src.deployment import create_app
 from src.models import PhasePredictor
 from src.anomaly import AnomalyDetector
+import uvicorn
 
 # Load models
 predictor = PhasePredictor()
@@ -142,8 +149,12 @@ detector = AnomalyDetector()
 
 # Create app
 app = create_app(predictor, detector)
-app.run(host='0.0.0.0', port=5000)
+uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
+
+**Access the interactive API documentation:**
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 #### API Endpoints
 
