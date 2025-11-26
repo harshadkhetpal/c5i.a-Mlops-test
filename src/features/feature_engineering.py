@@ -102,13 +102,32 @@ class FeatureEngineering:
     
     @staticmethod
     def create_all_features(data: pd.DataFrame, 
-                           co2_col: str = 'co2_ppm',
-                           temp_col: str = 'process_temp_c',
-                           pressure_col: str = 'pressure_kpa',
-                           do_col: str = 'o2_pct') -> pd.DataFrame:
+                           co2_col: str = 'co2_lpm',
+                           temp_col: str = 'temp_c',
+                           pressure_col: str = 'pressure_bar',
+                           do_col: str = 'do_ppm') -> pd.DataFrame:
         """Create all features."""
         # Temporal features
         data = FeatureEngineering.create_temporal_features(data)
+        
+        # Add valve_state and agitator_rpm features if available
+        if 'valve_state' in data.columns:
+            data['valve_state_binary'] = (data['valve_state'] > 0).astype(int)
+            data['valve_state_change'] = data['valve_state'].diff()
+        
+        if 'agitator_rpm' in data.columns:
+            data['agitator_rpm_normalized'] = data['agitator_rpm'] / (data['agitator_rpm'].max() + 1e-10)
+            data['agitator_rpm_change'] = data['agitator_rpm'].diff()
+        
+        # Add attenuation features if OG available
+        if 'OG' in data.columns and co2_col in data.columns:
+            # Estimate current gravity from CO2 production
+            initial_co2 = data[co2_col].iloc[0] if len(data) > 0 else 0
+            current_co2 = data[co2_col]
+            # Approximate attenuation percentage
+            data['estimated_attenuation'] = ((current_co2 - initial_co2) / (initial_co2 + 1e-10)) * 100
+            if 'target_attenuation' in data.columns:
+                data['attenuation_deviation'] = data['estimated_attenuation'] - data['target_attenuation']
         
         # Polynomial features
         poly_cols = [c for c in [co2_col, temp_col] if c in data.columns]
@@ -121,16 +140,22 @@ class FeatureEngineering:
             interaction_pairs.append((co2_col, temp_col))
         if co2_col in data.columns and pressure_col in data.columns:
             interaction_pairs.append((co2_col, pressure_col))
+        if 'valve_state' in data.columns and co2_col in data.columns:
+            interaction_pairs.append(('valve_state', co2_col))
+        if 'agitator_rpm' in data.columns and co2_col in data.columns:
+            interaction_pairs.append(('agitator_rpm', co2_col))
         if interaction_pairs:
             data = FeatureEngineering.create_interaction_features(data, interaction_pairs)
         
         # Lag features
-        lag_cols = [c for c in [co2_col, do_col, temp_col] if c in data.columns]
+        lag_cols = [c for c in [co2_col, do_col, temp_col, 'valve_state', 'agitator_rpm'] 
+                   if c in data.columns]
         if lag_cols:
             data = FeatureEngineering.create_lag_features(data, lag_cols, lags=[5, 15, 60])
         
         # Rolling features
-        rolling_cols = [c for c in [co2_col, do_col] if c in data.columns]
+        rolling_cols = [c for c in [co2_col, do_col, 'valve_state', 'agitator_rpm'] 
+                       if c in data.columns]
         if rolling_cols:
             data = FeatureEngineering.create_rolling_features(data, rolling_cols, windows=[6, 12, 24])
         

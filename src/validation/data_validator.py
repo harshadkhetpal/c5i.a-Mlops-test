@@ -103,6 +103,26 @@ class DataValidator:
             error_message="High percentage of missing values detected"
         ))
     
+    def add_sensor_field_validation(self):
+        """Add validation for all sensor fields from case study."""
+        # Valve state validation
+        self.add_valve_state_validation()
+        
+        # Agitator RPM validation
+        self.add_agitator_rpm_validation()
+        
+        # CO2 range validation
+        self.add_range_rule('co2_lpm', min_val=0, max_val=5000)
+        
+        # DO range validation
+        self.add_range_rule('do_ppm', min_val=0, max_val=21)
+        
+        # Pressure range validation
+        self.add_range_rule('pressure_bar', min_val=0.5, max_val=3.0)
+        
+        # Temperature range validation
+        self.add_range_rule('temp_c', min_val=10, max_val=40)
+    
     def add_outlier_detection_rule(self, column: str, method: str = 'iqr'):
         """Add outlier detection rule."""
         def check_outliers(data: pd.DataFrame) -> tuple:
@@ -133,6 +153,62 @@ class DataValidator:
             check_func=lambda df: check_outliers(df),
             error_message=f"Excessive outliers detected in {column}"
         ))
+    
+    def add_valve_state_validation(self):
+        """Add validation for valve_state (should be 0 or 1)."""
+        def check_valve_state(data: pd.DataFrame) -> tuple:
+            if 'valve_state' not in data.columns:
+                return True, None
+            
+            invalid = ~data['valve_state'].isin([0, 1])
+            invalid_count = invalid.sum()
+            
+            if invalid_count > 0:
+                return False, f"{invalid_count} invalid valve_state values (must be 0 or 1)"
+            return True, None
+        
+        self.rules.append(ValidationRule(
+            name="valve_state_validation",
+            check_func=lambda df: check_valve_state(df),
+            error_message="Invalid valve_state values detected"
+        ))
+    
+    def add_agitator_rpm_validation(self, min_rpm: float = 0, max_rpm: float = 3000):
+        """Add validation for agitator_rpm range."""
+        def check_agitator_rpm(data: pd.DataFrame) -> tuple:
+            if 'agitator_rpm' not in data.columns:
+                return True, None
+            
+            out_of_range = (data['agitator_rpm'] < min_rpm) | (data['agitator_rpm'] > max_rpm)
+            out_of_range_count = out_of_range.sum()
+            
+            if out_of_range_count > 0:
+                return False, f"{out_of_range_count} agitator_rpm values out of range [{min_rpm}, {max_rpm}]"
+            return True, None
+        
+        self.rules.append(ValidationRule(
+            name="agitator_rpm_validation",
+            check_func=lambda df: check_agitator_rpm(df),
+            error_message="Agitator RPM out of valid range"
+        ))
+    
+    def generate_sensor_summary(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """Generate summary statistics for all sensor fields."""
+        sensor_cols = ['co2_lpm', 'do_ppm', 'temp_c', 'pressure_bar', 
+                      'valve_state', 'agitator_rpm']
+        summary = {}
+        
+        for col in sensor_cols:
+            if col in data.columns:
+                summary[col] = {
+                    'mean': float(data[col].mean()) if data[col].dtype in ['float64', 'int64'] else None,
+                    'std': float(data[col].std()) if data[col].dtype in ['float64', 'int64'] else None,
+                    'min': float(data[col].min()) if data[col].dtype in ['float64', 'int64'] else None,
+                    'max': float(data[col].max()) if data[col].dtype in ['float64', 'int64'] else None,
+                    'missing_count': int(data[col].isnull().sum())
+                }
+        
+        return summary
     
     def validate(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Run all validation rules."""

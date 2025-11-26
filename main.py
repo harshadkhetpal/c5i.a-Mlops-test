@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.preprocessing import (
     MissingHandler, OutlierHandler, Normalizer, 
-    Resampler, Aligner, PreprocessingPipeline
+    Resampler, Aligner, PreprocessingPipeline,
+    SchemaMapper, GoldenProfiles
 )
 from src.analytics import PandasAnalytics, NumPyOperations
 from src.features import FeatureEngineering
@@ -29,12 +30,22 @@ def load_data(data_path: str = 'gas_sensors_full_scale_dataset.csv') -> pd.DataF
     return data
 
 def prepare_data(data: pd.DataFrame) -> pd.DataFrame:
-    """Prepare data by adding synthetic batch/tank IDs if needed."""
+    """Prepare data by adding synthetic batch/tank IDs and mapping to case study schema."""
     data = data.copy()
+    
+    # Map to case study schema
+    data = SchemaMapper.map_to_case_study_schema(data)
     
     # Create synthetic batch_id based on date if not present
     if 'batch_id' not in data.columns:
-        data['batch_id'] = pd.to_datetime(data['timestamp_index']).dt.date.astype(str)
+        if 'timestamp' in data.columns:
+            data['batch_id'] = pd.to_datetime(data['timestamp']).dt.date.astype(str)
+        elif 'timestamp_index' in data.columns:
+            data['batch_id'] = pd.to_datetime(data['timestamp_index']).dt.date.astype(str)
+    
+    # Create tank_id from batch_id if not present
+    if 'tank_id' not in data.columns:
+        data['tank_id'] = data.get('batch_id', 'tank_1')
     
     # Create synthetic strain and style for alignment
     if 'strain' not in data.columns:
@@ -48,12 +59,25 @@ def run_preprocessing(data: pd.DataFrame) -> pd.DataFrame:
     """Run preprocessing pipeline."""
     print("\n=== Running Preprocessing Pipeline ===")
     
+    # Create golden profiles
+    golden_profiles = GoldenProfiles()
+    golden_profiles.generate_default_profiles()
+    
     # Create preprocessing steps
     missing_handler = MissingHandler(method='both', limit=3)
     outlier_handler = OutlierHandler(method='iqr', action='clip')
-    normalizer = Normalizer(method='standard', group_by=None)  # Global normalization
-    resampler = Resampler(freq='5min', method='mean', time_col='timestamp_index')
-    aligner = Aligner(golden_profiles=None)
+    normalizer = Normalizer(method='standard', group_by='tank_id')  # Tank-level normalization
+    resampler = Resampler(freq='5min', method='mean', time_col='timestamp')
+    # Create golden profiles DataFrame for aligner
+    golden_profiles_df = pd.DataFrame([
+        {
+            'strain': strain,
+            'style': style,
+            'max_co2': profile['co2_lpm'].max() if 'co2_lpm' in profile.columns else 2000
+        }
+        for (strain, style), profile in golden_profiles.profiles.items()
+    ])
+    aligner = Aligner(golden_profiles=golden_profiles_df)
     
     # Create pipeline
     pipeline = PreprocessingPipeline([
@@ -103,16 +127,30 @@ def run_analytics(data: pd.DataFrame):
     """Run advanced analytics."""
     print("\n=== Running Advanced Analytics ===")
     
-    # Compute batch metrics
-    batch_metrics = PandasAnalytics.compute_batch_metrics(data)
+    # Compute batch metrics (using case study column names)
+    batch_metrics = PandasAnalytics.compute_batch_metrics(
+        data, 
+        batch_id='batch_id',
+        time_col='timestamp',
+        co2_col='co2_lpm',
+        do_col='do_ppm',
+        pressure_col='pressure_bar'
+    )
     print(f"Computed metrics for {len(batch_metrics)} batches")
     
     # Compute rolling statistics
-    data_with_rolling = PandasAnalytics.compute_rolling_statistics(data, window=12)
+    data_with_rolling = PandasAnalytics.compute_rolling_statistics(
+        data, 
+        window=12,
+        columns=['co2_lpm', 'do_ppm', 'temp_c', 'pressure_bar']
+    )
     print("Computed rolling statistics")
     
     # Compute correlation matrix
-    corr_matrix = NumPyOperations.pearson_correlation_matrix(data)
+    corr_matrix = NumPyOperations.pearson_correlation_matrix(
+        data,
+        columns=['co2_lpm', 'do_ppm', 'temp_c']
+    )
     print(f"Computed correlation matrix: {corr_matrix.shape}")
     
     return batch_metrics, data_with_rolling
@@ -135,11 +173,12 @@ def train_model(data: pd.DataFrame):
     # Prepare features
     feature_data = FeatureEngineering.create_all_features(data)
     
-    # Create target (phase)
-    if 'phase' not in feature_data.columns:
+    # Create target (phase) - use case study column names
+    co2_col = 'co2_lpm' if 'co2_lpm' in feature_data.columns else 'co2_ppm'
+    if 'phase' not in feature_data.columns and co2_col in feature_data.columns:
         # Create synthetic phases based on CO2 levels
         feature_data['phase'] = pd.cut(
-            feature_data['co2_ppm'],
+            feature_data[co2_col],
             bins=[0, 500, 1000, 1500, float('inf')],
             labels=['lag', 'exponential', 'stationary', 'decline']
         )
@@ -177,7 +216,14 @@ def run_anomaly_detection(data: pd.DataFrame):
     print("\n=== Running Anomaly Detection ===")
     
     detector = AnomalyDetector()
-    anomalies = detector.detect_all(data)
+    # Use case study column names
+    anomalies = detector.detect_all(
+        data,
+        co2_col='co2_lpm',
+        do_col='do_ppm',
+        pressure_col='pressure_bar',
+        time_col='timestamp'
+    )
     
     print(f"Detected {len(anomalies)} anomalies")
     if len(anomalies) > 0:

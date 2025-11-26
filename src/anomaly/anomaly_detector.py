@@ -11,8 +11,8 @@ class AnomalyDetector:
         self.anomaly_timeline_ = []
     
     def detect_stuck_fermentation(self, data: pd.DataFrame,
-                                  co2_col: str = 'co2_ppm',
-                                  time_col: str = 'timestamp_index',
+                                  co2_col: str = 'co2_lpm',
+                                  time_col: str = 'timestamp',
                                   window: int = 12,
                                   threshold: float = 0.01) -> pd.DataFrame:
         """Detect stuck fermentation (CO2 stops increasing)."""
@@ -38,8 +38,8 @@ class AnomalyDetector:
         return anomalies
     
     def detect_oxidation_risk(self, data: pd.DataFrame,
-                             do_col: str = 'o2_pct',
-                             time_col: str = 'timestamp_index',
+                             do_col: str = 'do_ppm',
+                             time_col: str = 'timestamp',
                              threshold: float = 0.5) -> pd.DataFrame:
         """Detect oxidation risks (DO spikes unexpectedly)."""
         data = data.copy()
@@ -67,10 +67,10 @@ class AnomalyDetector:
         return anomalies
     
     def detect_pressure_anomalies(self, data: pd.DataFrame,
-                                 pressure_col: str = 'pressure_kpa',
-                                 time_col: str = 'timestamp_index',
-                                 max_pressure: float = 150.0,
-                                 min_pressure: float = 80.0) -> pd.DataFrame:
+                                 pressure_col: str = 'pressure_bar',
+                                 time_col: str = 'timestamp',
+                                 max_pressure: float = 2.0,  # bar
+                                 min_pressure: float = 0.8) -> pd.DataFrame:  # bar
         """Detect pressure anomalies."""
         data = data.copy()
         
@@ -97,8 +97,8 @@ class AnomalyDetector:
         return anomalies
     
     def detect_abnormal_co2_activity(self, data: pd.DataFrame,
-                                    co2_col: str = 'co2_ppm',
-                                    time_col: str = 'timestamp_index',
+                                    co2_col: str = 'co2_lpm',
+                                    time_col: str = 'timestamp',
                                     golden_profile: Optional[pd.DataFrame] = None,
                                     threshold: float = 0.3) -> pd.DataFrame:
         """Detect abnormal CO2 activity compared to golden profile."""
@@ -143,11 +143,63 @@ class AnomalyDetector:
         
         return anomalies
     
+    def detect_over_vigorous_co2(self, data: pd.DataFrame,
+                                co2_col: str = 'co2_lpm',
+                                time_col: str = 'timestamp',
+                                threshold_rate: float = 500.0) -> pd.DataFrame:
+        """Detect over-vigorous CO2 release (rapid CO2 increase)."""
+        data = data.copy()
+        data = data.sort_values(time_col)
+        
+        if co2_col not in data.columns:
+            return pd.DataFrame()
+        
+        # Compute CO2 rate of change
+        data['co2_rate'] = data[co2_col].diff()
+        data['co2_rate_per_min'] = data['co2_rate'] / 5.0  # Assuming 5-minute intervals
+        
+        # Detect over-vigorous release: rate exceeds threshold
+        over_vigorous = data[data['co2_rate_per_min'] > threshold_rate]
+        
+        if len(over_vigorous) > 0:
+            over_vigorous = over_vigorous.copy()
+            over_vigorous['anomaly_type'] = 'over_vigorous_co2'
+            over_vigorous['severity'] = 'high'
+            self.anomalies_.extend(over_vigorous.to_dict('records'))
+        
+        return over_vigorous
+    
+    def detect_rapid_pressure_rise(self, data: pd.DataFrame,
+                                   pressure_col: str = 'pressure_bar',
+                                   time_col: str = 'timestamp',
+                                   threshold_rate: float = 0.1) -> pd.DataFrame:
+        """Detect rapid pressure rise (abnormal pressure increase)."""
+        data = data.copy()
+        data = data.sort_values(time_col)
+        
+        if pressure_col not in data.columns:
+            return pd.DataFrame()
+        
+        # Compute pressure rate of change
+        data['pressure_rate'] = data[pressure_col].diff()
+        data['pressure_rate_per_min'] = data['pressure_rate'] / 5.0  # Assuming 5-minute intervals
+        
+        # Detect rapid pressure rise
+        rapid_rise = data[data['pressure_rate_per_min'] > threshold_rate]
+        
+        if len(rapid_rise) > 0:
+            rapid_rise = rapid_rise.copy()
+            rapid_rise['anomaly_type'] = 'rapid_pressure_rise'
+            rapid_rise['severity'] = 'high'
+            self.anomalies_.extend(rapid_rise.to_dict('records'))
+        
+        return rapid_rise
+    
     def detect_all(self, data: pd.DataFrame,
-                  co2_col: str = 'co2_ppm',
-                  do_col: str = 'o2_pct',
-                  pressure_col: str = 'pressure_kpa',
-                  time_col: str = 'timestamp_index',
+                  co2_col: str = 'co2_lpm',
+                  do_col: str = 'do_ppm',
+                  pressure_col: str = 'pressure_bar',
+                  time_col: str = 'timestamp',
                   golden_profile: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """Detect all types of anomalies."""
         self.anomalies_ = []
@@ -157,9 +209,12 @@ class AnomalyDetector:
         oxidation = self.detect_oxidation_risk(data, do_col, time_col)
         pressure = self.detect_pressure_anomalies(data, pressure_col, time_col)
         abnormal_co2 = self.detect_abnormal_co2_activity(data, co2_col, time_col, golden_profile)
+        over_vigorous = self.detect_over_vigorous_co2(data, co2_col, time_col)
+        rapid_pressure = self.detect_rapid_pressure_rise(data, pressure_col, time_col)
         
         # Combine all anomalies
-        all_anomalies = pd.concat([stuck, oxidation, pressure, abnormal_co2], ignore_index=True)
+        all_anomalies = pd.concat([stuck, oxidation, pressure, abnormal_co2, 
+                                  over_vigorous, rapid_pressure], ignore_index=True)
         
         # Remove duplicates
         if len(all_anomalies) > 0 and time_col in all_anomalies.columns:
