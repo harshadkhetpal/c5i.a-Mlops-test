@@ -118,8 +118,29 @@ class ReportGenerator:
     
     def save_report(self, report: Dict[str, Any], filepath: str):
         """Save report to JSON file."""
+        def convert_to_serializable(obj):
+            """Convert numpy/pandas types to Python native types."""
+            if isinstance(obj, (np.integer, np.int64)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64)):
+                return float(obj) if not np.isnan(obj) else None
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, pd.Timestamp):
+                return obj.isoformat()
+            elif isinstance(obj, dict):
+                return {str(k): convert_to_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_serializable(item) for item in obj]
+            elif pd.isna(obj):
+                return None
+            return obj
+        
+        # Convert report to serializable format
+        serializable_report = convert_to_serializable(report)
+        
         with open(filepath, 'w') as f:
-            json.dump(report, f, indent=2, default=str)
+            json.dump(serializable_report, f, indent=2, default=str)
     
     def generate_html_report(self, report: Dict[str, Any]) -> str:
         """Generate HTML report."""

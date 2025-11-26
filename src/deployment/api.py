@@ -75,6 +75,11 @@ def create_app(phase_predictor=None, anomaly_detector=None):
             if phase_predictor is None:
                 raise HTTPException(status_code=500, detail="Model not loaded")
             
+            # Apply feature engineering before prediction
+            from src.features import FeatureEngineering
+            sensor_data = FeatureEngineering.create_all_features(sensor_data)
+            
+            # Use the model's prepare_features method which handles feature selection
             # Prepare features and predict
             forecast = phase_predictor.forecast(sensor_data, hours_ahead=6)
             

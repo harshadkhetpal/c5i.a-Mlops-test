@@ -158,6 +158,8 @@ def train_model(data: pd.DataFrame):
     
     # Train model
     predictor = PhasePredictor(n_estimators=50, learning_rate=0.1, max_depth=3)
+    # Set feature columns before training so they're saved
+    predictor.feature_columns = feature_cols
     results = predictor.train(X, y, test_size=0.2)
     
     print(f"Train Macro-F1: {results['train_macro_f1']:.4f}")

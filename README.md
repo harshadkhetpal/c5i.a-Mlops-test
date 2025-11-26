@@ -5,10 +5,10 @@ An end-to-end ML workflow for beer manufacturing fermentation monitoring, phase 
 ## Overview
 
 This system provides:
-- **Phase Forecasting**: Predict fermentation phase 6 hours ahead
-- **Anomaly Detection**: Detect stuck fermentation, oxidation risks, pressure anomalies, and abnormal CO2 activity
-- **Batch Analytics**: Comprehensive batch-level summaries and metrics
-- **Data-Driven Recommendations**: Automated recommendations based on batch performance
+- Phase Forecasting: Predict fermentation phase 6 hours ahead
+- Anomaly Detection: Detect stuck fermentation, oxidation risks, pressure anomalies, and abnormal CO2 activity
+- Batch Analytics: Comprehensive batch-level summaries and metrics
+- Data-Driven Recommendations: Automated recommendations based on batch performance
 
 ## Project Structure
 
@@ -49,9 +49,9 @@ c5i.a-Mlops-test/
 
 ## Installation
 
-1. **Clone the repository** (if applicable) or navigate to the project directory
+1. Clone the repository (if applicable) or navigate to the project directory
 
-2. **Install dependencies**:
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -152,7 +152,7 @@ app = create_app(predictor, detector)
 uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-**Access the interactive API documentation:**
+Access the interactive API documentation:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
@@ -174,11 +174,11 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 
 ### 1. Preprocessing Pipeline
 
-- **MissingHandler**: Interpolation and forward fill
-- **OutlierHandler**: IQR and Z-score outlier detection
-- **Normalizer**: Standard, MinMax, or Robust scaling
-- **Resampler**: Uniform time intervals (5 minutes)
-- **Aligner**: Align to golden profiles
+- MissingHandler: Interpolation and forward fill
+- OutlierHandler: IQR and Z-score outlier detection
+- Normalizer: Standard, MinMax, or Robust scaling
+- Resampler: Uniform time intervals (5 minutes)
+- Aligner: Align to golden profiles
 
 ### 2. Advanced Analytics
 
@@ -206,8 +206,8 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 
 ### 5. Modeling
 
-- **Phase Predictor**: Gradient Boosting Machine for phase classification
-- **Changepoint Detector**: Detect phase boundaries
+- Phase Predictor: Gradient Boosting Machine for phase classification
+- Changepoint Detector: Detect phase boundaries
 - Evaluation using Macro-F1 score
 
 ### 6. Anomaly Detection
@@ -237,10 +237,10 @@ The system expects time-series data with the following columns:
 
 ## Outputs
 
-After running `main.py`, you'll find:
+After running main.py, you'll find:
 
-- **models/phase_predictor.pkl**: Trained phase prediction model
-- **reports/batch_*_report.json**: Batch reports in JSON format
+- models/phase_predictor.pkl: Trained phase prediction model
+- reports/batch_*_report.json: Batch reports in JSON format
 - Console output with processing status and metrics
 
 ## Example Notebook

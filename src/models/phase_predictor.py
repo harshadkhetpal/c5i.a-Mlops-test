@@ -25,19 +25,31 @@ class PhasePredictor:
                         feature_cols: Optional[List[str]] = None) -> np.ndarray:
         """Prepare features for training."""
         if feature_cols is None:
-            # Default feature columns - will be set during training
-            if self.feature_columns is None:
+            # Use saved feature columns if available
+            if self.feature_columns is not None:
+                feature_cols = self.feature_columns
+            else:
                 # Select numeric columns excluding metadata
                 exclude_cols = ['timestamp_index', 'batch_id', 'phase', 'phase_encoded']
                 feature_cols = [c for c in data.select_dtypes(include=[np.number]).columns 
                                if c not in exclude_cols]
-                # Limit to reasonable number of features
-                feature_cols = feature_cols[:50]  # Top 50 features
-            else:
-                feature_cols = self.feature_columns
+                # Don't limit - use all available features
+                # Store for future use
+                self.feature_columns = feature_cols
         
-        self.feature_columns = feature_cols
+        # Use only available columns from the data
         available_cols = [c for c in feature_cols if c in data.columns]
+        
+        # If we have saved feature columns but some are missing, fill with zeros
+        if len(available_cols) < len(feature_cols):
+            # Create a DataFrame with all expected columns, fill missing with 0
+            result_df = pd.DataFrame(index=data.index)
+            for col in feature_cols:
+                if col in data.columns:
+                    result_df[col] = data[col]
+                else:
+                    result_df[col] = 0
+            return result_df[feature_cols].fillna(0).values
         
         if len(available_cols) == 0:
             raise ValueError("No valid feature columns found")
@@ -102,12 +114,24 @@ class PhasePredictor:
         last_pred = predictions[-1]
         last_proba = probabilities[-1]
         
-        # Create probability dictionary
-        proba_dict = {self.classes_[i]: float(last_proba[i]) 
-                     for i in range(len(self.classes_))}
+        # Convert numpy types to Python native types
+        if isinstance(last_pred, (np.integer, np.int64)):
+            last_pred = int(last_pred)
+        elif isinstance(last_pred, np.ndarray):
+            last_pred = int(last_pred.item()) if last_pred.size == 1 else int(last_pred[-1])
+        
+        # Create probability dictionary with Python native types
+        proba_dict = {}
+        for i in range(len(self.classes_)):
+            class_name = str(self.classes_[i]) if isinstance(self.classes_[i], (np.integer, np.int64)) else self.classes_[i]
+            proba_dict[class_name] = float(last_proba[i])
+        
+        # Map phase number to name if needed
+        phase_map = {0: 'lag', 1: 'exponential', 2: 'stationary', 3: 'decline'}
+        predicted_phase_name = phase_map.get(int(last_pred), str(last_pred))
         
         return {
-            'predicted_phase': last_pred,
+            'predicted_phase': predicted_phase_name,
             'phase_probabilities': proba_dict,
             'confidence': float(max(last_proba))
         }
